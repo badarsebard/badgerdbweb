@@ -1,7 +1,7 @@
 //
-// boltdbweb is a webserver base GUI for interacting with BoltDB databases.
+// badgerdbweb is a webserver base GUI for interacting with BadgerDB databases.
 //
-// For authorship see https://github.com/evnix/boltdbweb
+// For authorship see https://github.com/badarsebard/badgerdbweb
 // MIT license is included in repository
 //
 package main
@@ -11,22 +11,20 @@ package main
 import (
 	"flag"
 	"fmt"
+	badgerbrowserweb "github.com/badarsebard/badgerdbweb/web"
+	"github.com/gin-gonic/gin"
 	"os"
 	"path"
-	"time"
 
-	"github.com/evnix/boltdbweb/web"
-	"github.com/gin-gonic/gin"
-
+	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
-	"github.com/boltdb/bolt"
 )
 
 const version = "v0.0.0"
 
 var (
 	showHelp   bool
-	db         *bolt.DB
+	db         *badger.DB
 	dbName     string
 	port       string
 	staticPath string
@@ -45,8 +43,8 @@ func usage(appName, version string) {
 
 func init() {
 	// Read the static path from the environment if set.
-	dbName = os.Getenv("BOLTDBWEB_DB_NAME")
-	port = os.Getenv("BOLTDBWEB_PORT")
+	dbName = os.Getenv("BADGERDBWEB_DB_NAME")
+	port = os.Getenv("BADGERDBWEB_PORT")
 	// Use default values if environment not set.
 	if port == "" {
 		port = "8080"
@@ -70,23 +68,23 @@ func main() {
 		os.Exit(0)
 	}
 
-	// If non-flag options are included assume bolt db is specified.
+	// If non-flag options are included assume badger db is specified.
 	if len(args) > 0 {
 		dbName = args[0]
 	}
 
 	if dbName == "" {
 		usage(appName, version)
-		log.Printf("\nERROR: Missing boltdb name\n")
+		log.Printf("\nERROR: Missing badgerdb name\n")
 		os.Exit(1)
 	}
 
 	fmt.Print(" ")
-	log.Info("starting boltdb-browser..")
+	log.Info("starting badgerdb-browser..")
 
 	var err error
-	db, err = bolt.Open(dbName, 0600, &bolt.Options{Timeout: 2 * time.Second})
-	boltbrowserweb.Db = db
+	db, err = badger.Open(badger.DefaultOptions(dbName))
+	badgerbrowserweb.Db = db
 
 	if err != nil {
 		fmt.Println(err)
@@ -101,15 +99,12 @@ func main() {
 		})
 	})
 
-	r.GET("/", boltbrowserweb.Index)
+	r.GET("/", badgerbrowserweb.Index)
 
-	r.GET("/buckets", boltbrowserweb.Buckets)
-	r.POST("/createBucket", boltbrowserweb.CreateBucket)
-	r.POST("/put", boltbrowserweb.Put)
-	r.POST("/get", boltbrowserweb.Get)
-	r.POST("/deleteKey", boltbrowserweb.DeleteKey)
-	r.POST("/deleteBucket", boltbrowserweb.DeleteBucket)
-	r.POST("/prefixScan", boltbrowserweb.PrefixScan)
+	r.POST("/set", badgerbrowserweb.Set)
+	r.POST("/get", badgerbrowserweb.Get)
+	r.POST("/deleteKey", badgerbrowserweb.DeleteKey)
+	r.POST("/prefixScan", badgerbrowserweb.PrefixScan)
 
 	r.StaticFS("/web", assetFS())
 

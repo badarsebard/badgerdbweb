@@ -1,13 +1,12 @@
-package boltbrowserweb
+package badgerbrowserweb
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/boltdb/bolt"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/gin-gonic/gin"
 )
 
-var Db *bolt.DB
+var Db *badger.DB
 
 func Index(c *gin.Context) {
 
@@ -15,62 +14,14 @@ func Index(c *gin.Context) {
 
 }
 
-func CreateBucket(c *gin.Context) {
-
-	if c.PostForm("bucket") == "" {
-		c.String(200, "no bucket name | n")
-	}
-
-	Db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(c.PostForm("bucket")))
-		b = b
-		if err != nil {
-			return fmt.Errorf("create bucket: %s", err)
-		}
-		return nil
-	})
-	c.String(200, "ok")
-
-}
-
-func DeleteBucket(c *gin.Context) {
-
-	if c.PostForm("bucket") == "" {
-		c.String(200, "no bucket name | n")
-	}
-
-	Db.Update(func(tx *bolt.Tx) error {
-		err := tx.DeleteBucket([]byte(c.PostForm("bucket")))
-
-		if err != nil {
-
-			c.String(200, "error no such bucket | n")
-			return fmt.Errorf("bucket: %s", err)
-		}
-
-		return nil
-	})
-
-	c.String(200, "ok")
-
-}
-
 func DeleteKey(c *gin.Context) {
 
-	if c.PostForm("bucket") == "" || c.PostForm("key") == "" {
-		c.String(200, "no bucket name or key | n")
+	if c.PostForm("key") == "" {
+		c.String(200, "no key | n")
 	}
 
-	Db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(c.PostForm("bucket")))
-		b = b
-		if err != nil {
-
-			c.String(200, "error no such bucket | n")
-			return fmt.Errorf("bucket: %s", err)
-		}
-
-		err = b.Delete([]byte(c.PostForm("key")))
+	Db.Update(func(tx *badger.Txn) error {
+		err := tx.Delete([]byte(c.PostForm("key")))
 
 		if err != nil {
 
@@ -85,22 +36,14 @@ func DeleteKey(c *gin.Context) {
 
 }
 
-func Put(c *gin.Context) {
+func Set(c *gin.Context) {
 
-	if c.PostForm("bucket") == "" || c.PostForm("key") == "" {
-		c.String(200, "no bucket name or key | n")
+	if c.PostForm("key") == "" {
+		c.String(200, "no key | n")
 	}
 
-	Db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(c.PostForm("bucket")))
-		b = b
-		if err != nil {
-
-			c.String(200, "error  creating bucket | n")
-			return fmt.Errorf("create bucket: %s", err)
-		}
-
-		err = b.Put([]byte(c.PostForm("key")), []byte(c.PostForm("value")))
+	Db.Update(func(tx *badger.Txn) error {
+		err := tx.Set([]byte(c.PostForm("key")), []byte(c.PostForm("value")))
 
 		if err != nil {
 
@@ -119,30 +62,26 @@ func Get(c *gin.Context) {
 
 	res := []string{"nok", ""}
 
-	if c.PostForm("bucket") == "" || c.PostForm("key") == "" {
+	if c.PostForm("key") == "" {
 
-		res[1] = "no bucket name or key | n"
+		res[1] = "no key | n"
 		c.JSON(200, res)
 	}
 
-	Db.View(func(tx *bolt.Tx) error {
+	Db.View(func(tx *badger.Txn) error {
 
-		b := tx.Bucket([]byte(c.PostForm("bucket")))
-
-		if b != nil {
-
-			v := b.Get([]byte(c.PostForm("key")))
-
-			res[0] = "ok"
-			res[1] = string(v)
-
-			fmt.Printf("Key: %s\n", v)
-
-		} else {
-
-			res[1] = "error opening bucket| does it exist? | n"
-
+		v, err := tx.Get([]byte(c.PostForm("key")))
+		if err != nil {
+			res[1] = "no such key | n"
+			c.JSON(200, res)
+			return fmt.Errorf("get kv: %s", err)
 		}
+
+		res[0] = "ok"
+		val, err := v.ValueCopy(nil)
+		res[1] = string(val)
+
+		fmt.Printf("Key: %s\n", v)
 		return nil
 
 	})
@@ -162,92 +101,28 @@ func PrefixScan(c *gin.Context) {
 
 	res.M = make(map[string]string)
 
-	if c.PostForm("bucket") == "" {
-
-		res.Result = "no bucket name | n"
-		c.JSON(200, res)
-	}
-
 	count := 0
 
-	if c.PostForm("key") == "" {
-
-		Db.View(func(tx *bolt.Tx) error {
-			// Assume bucket exists and has keys
-			b := tx.Bucket([]byte(c.PostForm("bucket")))
-
-			if b != nil {
-
-				c := b.Cursor()
-
-				for k, v := c.First(); k != nil; k, v = c.Next() {
-					res.M[string(k)] = string(v)
-
-					if count > 2000 {
-						break
-					}
-					count++
-				}
-
-				res.Result = "ok"
-
-			} else {
-
-				res.Result = "no such bucket available | n"
-
+	Db.View(func(tx *badger.Txn) error {
+		prefix := []byte(c.PostForm("key"))
+		it := tx.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			k := item.Key()
+			_ = item.Value(func(val []byte) error {
+				res.M[string(k)] = string(val)
+				return nil
+			})
+			count++
+			if count > 2000 {
+				break
 			}
+		}
 
-			return nil
-		})
+		res.Result = "ok"
 
-	} else {
-
-		Db.View(func(tx *bolt.Tx) error {
-			// Assume bucket exists and has keys
-			b := tx.Bucket([]byte(c.PostForm("bucket"))).Cursor()
-
-			if b != nil {
-
-				prefix := []byte(c.PostForm("key"))
-
-				for k, v := b.Seek(prefix); bytes.HasPrefix(k, prefix); k, v = b.Next() {
-					res.M[string(k)] = string(v)
-					if count > 2000 {
-						break
-					}
-					count++
-				}
-
-				res.Result = "ok"
-
-			} else {
-
-				res.Result = "no such bucket available | n"
-
-			}
-
-			return nil
-		})
-
-	}
-
-	c.JSON(200, res)
-
-}
-
-func Buckets(c *gin.Context) {
-
-	res := []string{}
-
-	Db.View(func(tx *bolt.Tx) error {
-
-		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
-
-			b := []string{string(name)}
-			res = append(res, b...)
-			return nil
-		})
-
+		return nil
 	})
 
 	c.JSON(200, res)

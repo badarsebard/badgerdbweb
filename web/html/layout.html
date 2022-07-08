@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>BoltDB-Web</title>
+        <title>BadgerDB-Web</title>
 <link rel="stylesheet" href="/web/css/uikit.min.css" />
 <link rel="stylesheet" href="/web/css/uikit.almost-flat.min.css" />
 <script src="/web/js//jquery-2.2.3.min.js"></script>
@@ -14,13 +14,10 @@
 
         <div class="uk-container uk-container-center uk-margin-top uk-margin-small-bottom">
             <nav class="uk-navbar uk-margin-large-bottom">
-                <a class="uk-navbar-brand uk-hidden-small" href="/">BoltDB-Web</a>
+                <a class="uk-navbar-brand uk-hidden-small" href="/">BadgerDB-Web</a>
                 <ul class="uk-navbar-nav uk-hidden-small">
                     <li>
                         <a href="/">Form</a>
-                    </li>
-                    <li>
-                        <a href="#/buckets">Buckets</a>
                     </li>
                     <li>
                         <a href="#/prefixScan">Prefix Scan</a>
@@ -41,9 +38,6 @@
             <div class="uk-vertical-align-middle" style="width: 600px;"   id="dfata">
                 <form class="uk-panel uk-panel-box uk-form">
                     <div class="uk-form-row">
-                        <input class="uk-width-1-1 uk-form-large" type="text" id="bucket" placeholder="Bucket name">
-                    </div>
-                    <div class="uk-form-row">
                         <input class="uk-width-1-1 uk-form-large" type="text" id="key" placeholder="Key">
                     </div>
                     <div class="uk-form-row">
@@ -53,13 +47,10 @@
                         <a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="get()">Get</a>
                     </div>
                     <div class="uk-form-row">
-                        <a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="put()">Put</a>
+                        <a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="set()">Set</a>
                     </div>
                     <div class="uk-form-row">
                         <a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="deleteKey()">Delete key</a>
-                    </div>
-                    <div class="uk-form-row">
-                        <a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="deleteBucket()">Delete Bucket</a>
                     </div>
                     
                 </form>
@@ -82,7 +73,6 @@
                 <div class="uk-vertical-align-middle uk-grid" style="width: 600px;text-align:left"   id="d">
                  
                     
-                        <div class="uk-width-1-3"> <input class="uk-form-small" type="text" id="pbucket" placeholder="Bucket name"></div>
                         <div class="uk-width-1-3">  <input class="uk-form-small" type="text" id="pkey" placeholder="Key Prefix"></div>
                         <div class="uk-width-1-3">  <a class="uk-width-1-1 uk-button uk-button-primary uk-button-large" onclick="prefixScan()">List</a></div>
                    
@@ -164,17 +154,6 @@
 logid=1000
 var router = new Navigo();
 
-router.on('/buckets', function () {
- 
-    loadBucketTable();
-    $('#pg1').hide();
-    $('#pg3').hide();
-    $('#pg2').show()
-
-});
-
-
-
 router.on('/prefixScan', function () {
  
     $('#pg1').hide();
@@ -210,8 +189,7 @@ function doDelete(key){
 
     if (r == true) {
             
-            b = $('#pbucket').val();
-            deleteKeyReq(b,key);
+            deleteKeyReq(key);
             window.setTimeout(prefixScan, 1000);
             
     }
@@ -224,10 +202,8 @@ function doDelete(key){
 
 function doEdit(key){
 
-    b = $('#pbucket').val();
-    getRequest(b,key);
+    getRequest(key);
 
-    $('#bucket').val(b);
     $('#key').val(key);
     router.navigate('#/');
 
@@ -236,9 +212,8 @@ function doEdit(key){
 
 
 
-function doPrefixScan(bucket){
+function doPrefixScan(){
 
-    $('#pbucket').val(bucket);
     $('#pkey').val("");
 
     prefixScan()
@@ -260,14 +235,14 @@ function log(text){
 
 function get(){
 
-    getRequest($('#bucket').val(),$('#key').val());
+    getRequest($('#key').val());
 
 
 }
 
-function getRequest(bucket,key){
+function getRequest(key){
 
-  $.post("/get",{bucket:bucket,key:key},function(data){
+  $.post("/get",{key:key},function(data){
 
   
     log(data)
@@ -281,29 +256,17 @@ function getRequest(bucket,key){
 
 }
 
-function deleteBucket(){
-
-
-  $.post("/deleteBucket",{bucket:$('#bucket').val()},function(data){
-
-  
-    log(data)
-
-  });
-
-}
-
 function deleteKey(){
 
 
-    deleteKeyReq($('#bucket').val(),$('#key').val());
+    deleteKeyReq($('#key').val());
 
 }
 
 
-function deleteKeyReq(bucket,key){
+function deleteKeyReq(key){
 
-  $.post("/deleteKey",{bucket:bucket,key:key},function(data){
+  $.post("/deleteKey",{key:key},function(data){
 
   
     log(data)
@@ -312,9 +275,9 @@ function deleteKeyReq(bucket,key){
 
 }
 
-function put(){
+function set(){
 
-      $.post("/put",{bucket:$('#bucket').val(),key:$('#key').val(),value:$('#value').val()},function(data){
+      $.post("/set",{key:$('#key').val(),value:$('#value').val()},function(data){
 
   
         log(data)
@@ -330,7 +293,7 @@ function prefixScan() {
   var source = $('#exploretpl').html();
 var template = Handlebars.compile(source);
 
-  $.post("/prefixScan",{bucket:$('#pbucket').val(),key:$('#pkey').val()},function(data){
+  $.post("/prefixScan",{key:$('#pkey').val()},function(data){
 
     log(data)
     //var rendered = Mustache.render(template, {list: data.M});
@@ -341,28 +304,6 @@ var template = Handlebars.compile(source);
   
   
 }
-
-
-function loadBucketTable() {
-    var source = $('#template').html();
-    var template = Handlebars.compile(source);
-
-  $.get("/buckets",{},function(data){
-
-  
-    var html    = template({list: data});
-    $('#data').html(html)
-
-  });
-  
-  
-}
-
-$( document ).ready(function() {
-    loadBucketTable();
-  // Handler for .ready() called.
-});
-
 </script>
 
 </html>
